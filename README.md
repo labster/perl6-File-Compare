@@ -10,7 +10,7 @@ Usage:
 	use File::Compare;
 	
 	say files_are_equal("file1.txt", "file2.txt");
-	say files_are_different("foo", "bar");
+	files_are_different("foo", "bar") ?? say "diff" !! say "same";
 
 	say "we match" if files_are_equal("x.png", "y.png",
 		maxbytes=> 4*1024*1024);
