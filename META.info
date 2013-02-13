@@ -4,5 +4,5 @@
   "description" : "Compare files to check for equality/difference",
   "author"      : "labster",
   "depends"     : [ ],
-  "source-url"  : "git://github.com/labster/perl6-File-Find-Duplicates.git"
+  "source-url"  : "git://github.com/labster/perl6-File-Compare.git"
 }
