@@ -1,10 +1,10 @@
 module File::Compare;
 use v6;
 
-my $MAX = 16*1024*1024;    # Default maximum bytes for .read
+my $MAX = 8*1024*1024;    # Default maximum bytes for .read
 
-sub files_are_equal (Str $left_filename, Str $right_filename, Int :$max_bytes = $MAX) is export {
-	unless $max_bytes > 0 { die "Argument \$max_bytes must be a positive number" } 
+sub files_are_equal (Str $left_filename, Str $right_filename, Int :$chunk_size = $MAX) is export {
+	unless $chunk_size > 0 { die "Argument \$chunk_size must be a positive number" } 
 
 	my $left_path  = $left_filename\.path;
 	my $right_path = $right_filename.path;
@@ -18,7 +18,7 @@ sub files_are_equal (Str $left_filename, Str $right_filename, Int :$max_bytes = 
 	my $left  = $left_path\.open;
 	my $right = $right_path.open;
 
-	$size min= $max_bytes;
+	$size min= $chunk_size;
 
 	while my $lhs := $left.read($size) {
 		my $rhs := $right.read($size) or return False;
@@ -32,8 +32,8 @@ sub files_are_equal (Str $left_filename, Str $right_filename, Int :$max_bytes = 
 
 }
 
-sub files_are_different (Str $left_filename, Str $right_filename, Int :$max_bytes = $MAX) is export {
-	my $result = files_are_equal($left_filename, $right_filename, max_bytes => $max_bytes);
+sub files_are_different (Str $left_filename, Str $right_filename, Int :$chunk_size = $MAX) is export {
+	my $result = files_are_equal($left_filename, $right_filename, chunk_size => $chunk_size);
 	$result ~~ Failure ?? $result !! !$result;
 }
 
@@ -48,25 +48,39 @@ File::Compare - Compare files to check for equality/difference
 
 	use File::Compare;
 	
-	say files_are_equal("file1.txt", "file2.txt");
+	if files_are_equal("file1.txt", "file2.txt")
+		{ say "These are identical files"; }
 	files_are_different("foo", "bar") ?? say "diff" !! say "same";
 
-	say "we match" if files_are_equal("x.png", "y.png", max_bytes=> 4*1024*1024);
+	say "we match" if files_are_equal("x.png", "y.png", chunk_size=> 4*1024*1024);
 	say "OH NOES" if files_are_different("i/dont/exist", "me/neither") ~~ Failure;
 
 =head1 DESCRIPTION
 
-File::Compare checks two files, and compares them as byte-buffers.  The function C<files_are_equal> returns Bool::True if the files have the same contents, Bool::False if any bytes are different, and a Failure object if an error occurs.  The other function, C<files_are_different>, returns the opposite boolean values, and is simply provided for code readability sugar.
+File::Compare checks two files, and compares them as byte-buffers if they are of the same size.  The function C<files_are_equal> returns Bool::True if the files have the same contents, Bool::False if any bytes are different, and a Failure object if an error occurs.  The other function, C<files_are_different>, returns the opposite boolean values, and is mostly provided for code readability sugar.  Note that Failure Boolifies to False, so the behavior is slightly different between the two functions.
 
-Both functions can take an optional named parameter, C<max_bytes>, which accepts any positive integer as a number of bytes.  This parameter tells File::Compare what size of chunks should be read from the disk at once, since the read operation is often the slowest.  The default reads 8 MiB of each file at a time.  A smaller value may be more useful in a memory-limited environment, or when files are most likely different.  A larger value could improve performance when files are most likely the same.
+Both functions can take an optional named parameter, C<chunk_size>, which accepts any positive integer.  This parameter tells File::Compare what size of chunks should be read from the disk at once, since the read operation is often the slowest.  The default reads 8 MiB of each file at a time.  A smaller value may be more useful in a memory-limited environment, or when files are most likely different.  A larger value could improve performance when files are most likely the same.
 
-=head2 TODO
+=head1 DIFFERENCES FROM PERL 5 VERSION
 
-Support IO objects.
+This code returns boolean values and Failure objects instead of 1, 0, -1 for difference, equality, and failure respectively.  The read chunk size is also increased four-fold because you're not really trying to run Rakudo on a 80486 processor, are you?
+
+=head2 Comparing Text
+
+This Perl 6 version drops the C<compare_text> function that was included in Perl 5.  Since most text files are of managable size, consider this code, which uses Perl's native newline handling:
+	C<"file1".path.open.lines eq "file2".path.open.lines>
+Functions can be evaluated on this as well:
+	C<foo( "old/script.p6".path.open.lines ) eq foo( "new/script.p6".path.open.lines )>
+Though, you may be better off looking at a module like L<Text::Diff> instead.
+
+=head1 TODO
+
+Support IO objects as parameters.
 
 =head1 SEE ALSO
 
-* L<File::Find::Duplicates> - searches directories and lists of files to find duplicate items.
+* L<File::Find::Duplicates> - Searches directories and lists of files to find duplicate items.
+* L<Text::Diff> - Perform diffs on files and record sets.
 
 =head1 AUTHOR
 

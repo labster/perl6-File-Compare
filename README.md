@@ -13,6 +13,6 @@ Usage:
 	files_are_different("foo", "bar") ?? say "diff" !! say "same";
 
 	say "we match" if files_are_equal("x.png", "y.png",
-		maxbytes=> 4*1024*1024);
+		chunk_size=> 4*1024*1024);
 
 See the pod in Compare.pm for more details.
