@@ -1,4 +1,4 @@
-module File::Compare;
+module File::Compare:auth<labster>;
 use v6;
 
 my $MAX = 8*1024*1024;    # Default maximum bytes for .read
@@ -37,6 +37,54 @@ sub files_are_different (Str $left_filename, Str $right_filename, Int :$chunk_si
 	$result ~~ Failure ?? $result !! !$result;
 }
 
+sub compare_multiple_files (@file_list, Int :$chunk_size = $MAX) is export {
+	unless $chunk_size > 0 { die "Argument \$chunk_size must be a positive number"; }
+	die "File list must contain only Str or IO::Path objects."
+		unless $_ ~~ any(Str, IO::Path) for @file_list;
+
+	my @file_paths = @file_list.map({$_ !~~ IO::Path ?? .path !! $_}).grep: { .r };
+
+	fail "Cannot read any files in @file_list." unless @file_paths.elems > 0;
+	if @file_paths.elems == 1 {return Array.new};
+
+	my @sizes = @file_paths».s;
+	
+	my @file = @file_paths».open;
+
+	# since we can't use the contents to hash it, use an arbitrary type id.
+	my @type;
+	my $type_counter = 1;
+	my @index := ^@file.elems;
+	for @index -> $i {
+		next if @type[$i].defined;
+		@type[$i] = $type_counter;
+		my $size := @sizes[$i];
+
+		my %skip = map { $_ => True},
+			   grep {@sizes[$_] != $size or @type[$_].defined }, @index;
+
+		@file[$i].seek(0,0);
+		#reset .tell in files we're not skipping
+		#  TODO: check and see if @file».seek(0,0) would be faster anyway
+		@file[grep {%skip{$_}.not}, @index]».seek(0,0);
+
+		while my $left := @file[$i].read($chunk_size) {
+			for $i^..^@file.elems -> $j {
+				next if %skip{$j};
+				my $right := @file[$j].read($chunk_size);
+				# decode to binary string because Buf evq Buf is *incredibly* slow
+				$right.decode('Binary') eq $left.decode('Binary') or %skip{$j} = True;
+			}
+		}
+		@type[$_] = $type_counter for grep { %skip{$_}.not }, @index;
+		$type_counter++;
+	}
+
+	my %files_by_type;
+	%files_by_type.push(@type Z=> @file_paths);
+	return %files_by_type.grep({.value ~~ Array}).hash.values;
+}
+
 
 =begin pod
 
@@ -52,14 +100,22 @@ File::Compare - Compare files to check for equality/difference
 		{ say "These are identical files"; }
 	files_are_different("foo", "bar") ?? say "diff" !! say "same";
 
+
 	say "we match" if files_are_equal("x.png", "y.png", chunk_size=> 4*1024*1024);
 	say "OH NOES" if files_are_different("i/dont/exist", "me/neither") ~~ Failure;
 
 =head1 DESCRIPTION
 
-File::Compare checks two files, and compares them as byte-buffers if they are of the same size.  The function C<files_are_equal> returns Bool::True if the files have the same contents, Bool::False if any bytes are different, and a Failure object if an error occurs.  The other function, C<files_are_different>, returns the opposite boolean values, and is mostly provided for code readability sugar.  Note that Failure Boolifies to False, so the behavior is slightly different between the two functions.
+File::Compare checks to see if files have the same contents, by comparing them as byte-buffers if they are of the same size.
 
-Both functions can take an optional named parameter, C<chunk_size>, which accepts any positive integer.  This parameter tells File::Compare what size of chunks should be read from the disk at once, since the read operation is often the slowest.  The default reads 8 MiB of each file at a time.  A smaller value may be more useful in a memory-limited environment, or when files are most likely different.  A larger value could improve performance when files are most likely the same.
+=head2 files_are_equal(), files_are_different()
+  The function C<files_are_equal> returns Bool::True if the files have the same contents, Bool::False if any bytes are different, and a Failure object if an error occurs.  The other function, C<files_are_different>, returns the opposite boolean values, and is mostly provided for code readability sugar.  Note that Failure Boolifies to False, so the behavior is slightly different between the two functions.
+
+=head2 compare_multiple_files
+Another function, C<compare_multiple_files>, will compare the contents of an array of files (passed in as any mixture of Str and IO::Path objects).  It will return an array of arrays of IO::Path objects, with matching files grouped together.
+
+=head2 chunk_size parameter
+All three functions can take an optional named parameter, C<chunk_size>, which accepts any positive integer.  This parameter tells File::Compare what size of chunks should be read from the disk at once, since the read operation is often the slowest.  The default reads 8 MiB of each file at a time.  A smaller value may be more useful in a memory-limited environment, or when files are most likely different.  A larger value could improve performance when files are most likely the same.
 
 =head1 DIFFERENCES FROM PERL 5 VERSION
 
