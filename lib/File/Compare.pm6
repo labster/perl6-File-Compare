@@ -22,9 +22,7 @@ sub files_are_equal (Str $left_filename, Str $right_filename, Int :$chunk_size =
 
 	while my $lhs := $left.read($size) {
 		my $rhs := $right.read($size) or return False;
-
-		# decode to binary string because Buf evq Buf is *incredibly* slow
-		$rhs.decode('Binary') eq $lhs.decode('Binary') or return False;
+		$lhs eqv $rhs     or return False;
 	}
 	return False if $right.read($size); #i.e. if right still has data somehow
 
@@ -72,8 +70,7 @@ sub compare_multiple_files (@file_list, Int :$chunk_size = $MAX) is export {
 			for $i^..^@file.elems -> $j {
 				next if %skip{$j};
 				my $right := @file[$j].read($chunk_size);
-				# decode to binary string because Buf evq Buf is *incredibly* slow
-				$right.decode('Binary') eq $left.decode('Binary') or %skip{$j} = True;
+				$left eqv $right or %skip{$j} = True;
 			}
 		}
 		@type[$_] = $type_counter for grep { %skip{$_}.not }, @index;
